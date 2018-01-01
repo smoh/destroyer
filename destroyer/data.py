@@ -40,12 +40,26 @@ class GradientSpectra(object):
 
 class Spectra(object):
     def __init__(self):
-        filenames = []
-        spec, ivar = [], []
-        for fn in glob(_datadir+"/lamost/*.fits.gz"):
-            filenames.append(os.path.basename(fn).replace("Ho_normalized_",""))
-            spec.append(fitsio.read(fn)[0])
-            ivar.append(fitsio.read(fn)[1])
-        self.filenames = np.array(filenames)
-        self.spec = np.array(spec)
-        self.ivar = np.array(ivar)
+        d = np.load(_datadir+"/GDh_kurucz_spectra.npz")
+        self.wave = d['wavelength'][:-32]
+        if os.path.exists(_datadir+"/lamost_spectra.npz"):
+            with np.load(_datadir+"/lamost_spectra.npz") as d:
+                spec, ivar, filenames = d['spec'], d['ivar'], d['filenames']
+                self.filenames, self.spec, self.ivar = filenames, spec, ivar
+        else:
+            filenames = []
+            spec, ivar = [], []
+            for fn in glob(_datadir+"/lamost/*.fits.gz"):
+                filenames.append(os.path.basename(fn).replace("Ho_normalized_",""))
+                spec.append(fitsio.read(fn)[0])
+                ivar.append(fitsio.read(fn)[1])
+            self.filenames = np.array(filenames)
+            self.spec = np.array(spec)
+            self.ivar = np.array(ivar)
+        self._make_masks()
+
+    def _make_masks(self):
+        bad_flux = ~np.isfinite(self.spec)
+        bad_ivar = (~np.isfinite(self.ivar) | (self.ivar <= 0))
+
+        self.mask = bad_flux | bad_ivar
