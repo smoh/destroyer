@@ -7,6 +7,8 @@ import astropy.units as u
 import astropy.constants as c
 import astropy.coordinates as coords
 
+from .data import GradientSpectra
+
 __all__ = [
     "alphaM",
     "RockDerivative"
@@ -25,19 +27,26 @@ class RockDerivative(object):
 
     def show_missing_abundances(self):
         """Returns a table of elements missing in either solar or earth composition"""
-        return self.df.loc[self.df.isnull()[['photosphere','bulk']].values.any(axis=1)]
+        return self.df.loc[
+            self.df.isnull()[['photosphere','bulk']].values.any(axis=1)]
 
     def _load_table(self):
         """Returns cleaned table of abundances"""
-        solar = pd.read_csv(_datadir+"/asplund2009.csv", skipinitialspace=True, comment='#')
-        atomic = pd.read_csv(_datadir+"/atomicmass.csv", skipinitialspace=True, comment='#')
-        earth = pd.read_csv(_datadir+"/mcdonough2003.csv", skipinitialspace=True, comment='#')
+        solar = pd.read_csv(_datadir+"/asplund2009.csv",
+                            skipinitialspace=True, comment='#')
+        atomic = pd.read_csv(_datadir+"/atomicmass.csv",
+                             skipinitialspace=True, comment='#')
+        earth = pd.read_csv(_datadir+"/mcdonough2003.csv",
+                            skipinitialspace=True, comment='#')
 
-        tb = pd.merge(solar[['Z','element','photosphere']], atomic[['element','Name','weight']], how='left', on='element')
+        tb = pd.merge(solar[['Z','element','photosphere']],
+                      atomic[['element','Name','weight']],
+                      how='left', on='element')
         tb = pd.merge(tb, earth, how='outer', on='element')
         tb = tb[['Z', 'element' , 'Name', 'weight', 'photosphere', 'bulk']]
         #NOTE: missing elements filled in arbitrarily
-        tb['f_photo'] = tb.weight*10**tb.photosphere.fillna(0)/(tb.weight*10**tb.photosphere.fillna(0)).sum()
+        tb['f_photo'] = tb.weight*10**tb.photosphere.fillna(0)\
+                        / (tb.weight*10**tb.photosphere.fillna(0)).sum()
         tb['f_rock'] = tb.bulk.fillna(0)/1e6
         return tb
 
@@ -45,8 +54,9 @@ class RockDerivative(object):
         return np.log10(1+ self.df.f_rock.values/self.df.f_photo.values * m/alphaM)
 
     def dXHdm_exact(self, m):
-        return self.df.f_rock.values / (self.df.f_photo.values + self.df.f_rock.values * m / alphaM) / alphaM / np.log(10)
+        return self.df.f_rock.values\
+            / (self.df.f_photo.values + self.df.f_rock.values * m / alphaM)\
+            / alphaM / np.log(10)
 
     def dXHdm_avg(self, m1, m2):
         return (self.XH(m2)-self.XH(m1))/(m2-m1)
-
