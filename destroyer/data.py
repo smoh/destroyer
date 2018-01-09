@@ -24,7 +24,7 @@ def load_lamost():
     """
     Returns the LAMOST catalog in ndarray.
     """
-    return fitsio.read(_datadir+"/lamost_DR_stellar.fits")
+    return fitsio.read(_datadir+"/lamost_DR4_stellar.fits")
 
 
 class GradientSpectra(object):
