@@ -42,10 +42,12 @@ class Spectra(object):
     def __init__(self):
         d = np.load(_datadir+"/GDh_kurucz_spectra.npz")
         self.wave = d['wavelength'][:-32]
-        if os.path.exists(_datadir+"/lamost_spectra.npz"):
-            with np.load(_datadir+"/lamost_spectra.npz") as d:
-                spec, ivar, filenames = d['spec'], d['ivar'], d['filenames']
-                self.filenames, self.spec, self.ivar = filenames, spec, ivar
+        if os.path.exists(_datadir+"/lamost_spectra_idx.npz"):
+            with np.load(_datadir+"/lamost_spectra_idx.npz") as d:
+                spec, ivar, filenames, idx =\
+                    d['spec'], d['ivar'], d['filenames'], d['idxlamost']
+                self.filenames, self.spec, self.ivar, self.idx =\
+                    filenames, spec, ivar, idx
         else:
             filenames = []
             spec, ivar = [], []
