@@ -63,6 +63,7 @@ class Spectra(object):
         self.filenames = data['filenames']
         self.idx = data['idx']
         self._make_masks()
+        self._exclude_constant_spectra()
 
     @classmethod
     def from_directory(cls, datadir):
@@ -125,3 +126,23 @@ class Spectra(object):
         # 34 pixels
 
         self.mask = bad_flux | bad_ivar | bad_pix_skyline
+
+    def _exclude_constant_spectra(self):
+
+        import itertools
+        # count consecutive values: ex) [1, 1, 0, 2.3, 5.3] -> [2, 1, 1, 1]
+        counts = []
+        for flux in self.flux:
+            counts.append(
+                np.max([len(list(v)) for _, v in itertools.groupby(flux)]))
+        counts = np.array(counts)
+        # threshold counts
+        bad_idx = np.where(counts > 50)[0]
+        print("Trashing {:d} spectra: weird constant flux spectra".format(
+            bad_idx.size))
+        boolidx = np.ones(self.flux.shape[0], dtype=np.bool)
+        boolidx[bad_idx] = False
+        self.flux = self.flux[boolidx]
+        self.ivar = self.ivar[boolidx]
+        self.filenames = self.filenames[boolidx]
+        self.idx = self.idx[boolidx]
