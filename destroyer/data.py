@@ -144,5 +144,6 @@ class Spectra(object):
         boolidx[bad_idx] = False
         self.flux = self.flux[boolidx]
         self.ivar = self.ivar[boolidx]
+        self.mask = self.mask[boolidx]
         self.filenames = self.filenames[boolidx]
         self.idx = self.idx[boolidx]
