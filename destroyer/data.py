@@ -1,6 +1,7 @@
 import os
 from glob import glob
 import numpy as np
+import pandas as pd
 import fitsio
 
 _datadir = os.path.dirname(os.path.dirname(__file__)[:-1])+'/data'
@@ -39,29 +40,88 @@ class GradientSpectra(object):
 
 
 class Spectra(object):
-    def __init__(self):
-        d = np.load(_datadir+"/GDh_kurucz_spectra.npz")
-        self.wave = d['wavelength'][:-32]
-        if os.path.exists(_datadir+"/lamost_spectra_idx.npz"):
-            with np.load(_datadir+"/lamost_spectra_idx.npz") as d:
-                spec, ivar, filenames, idx =\
-                    d['spec'], d['ivar'], d['filenames'], d['idxlamost']
-                self.filenames, self.spec, self.ivar, self.idx =\
-                    filenames, spec, ivar, idx
-        else:
-            filenames = []
-            spec, ivar = [], []
-            for fn in glob(_datadir+"/lamost/*.fits.gz"):
-                filenames.append(os.path.basename(fn).replace("Ho_normalized_",""))
-                spec.append(fitsio.read(fn)[0])
-                ivar.append(fitsio.read(fn)[1])
-            self.filenames = np.array(filenames)
-            self.spec = np.array(spec)
-            self.ivar = np.array(ivar)
+    def __init__(self, data):
+        """
+        Load Ting's normalized LAMOST spectra in arrays
+
+        Attributes
+        ----------
+        wave : 1d-array, (Nwave, )
+            wavelength array
+        flux : 2d-array, (Nstar, Nwave)
+            flux array
+        ivar : 2d-array, (Nstar, Nwave)
+            inverse variance array,
+        mask : 2d-array, (Nstar, Nwave)
+            mask array, `True` for masked pixels
+        idx : 1d-array, (Nstar, )
+            index array into LAMOST catalog
+        """
+        self.wave = data['wave']
+        self.flux = data['flux']
+        self.ivar = data['ivar']
+        self.filenames = data['filenames']
+        self.idx = data['idx']
         self._make_masks()
 
+    @classmethod
+    def from_directory(cls, datadir):
+        """
+        Read in all spectra fits files in a directory
+        """
+        d = np.load(_datadir+"/GDh_kurucz_spectra.npz")
+        wave = d['wavelength'][:-32]
+        filenames, flux, ivar = [], [], []
+        for fn in glob(datadir+"/*.fits.gz"):
+            filenames.append(os.path.basename(fn).replace("Ho_normalized_",""))
+            flux.append(fitsio.read(fn)[0])
+            ivar.append(fitsio.read(fn)[1])
+        filenames = np.array(filenames)
+        flux = np.array(flux)
+        ivar = np.array(ivar)
+
+        lookup = load_lookup()
+        lookup = pd.DataFrame({"filename":lookup}).reset_index()
+        merged = pd.merge(pd.DataFrame({'filename':filenames}),
+                          lookup)
+        idx = merged['index'].values
+        spectra = cls(dict(wave=wave, flux=flux, ivar=ivar, filenames=filenames,
+                           idx=idx))
+        return spectra
+
+
+    def to_npz(self, filename):
+        """
+        Save spectra to npz file
+        """
+        with open(filename, 'wb') as f:
+            np.savez(f, wave=self.wave, flux=self.flux, ivar=self.ivar,
+                     filenames=self.filenames, idx=self.idx)
+
+
+    @classmethod
+    def from_npz(cls, filename):
+        """
+        Initialize Spectra from npz file.
+        """
+        return cls(np.load(filename))
+
+
     def _make_masks(self):
-        bad_flux = ~np.isfinite(self.spec)
+        """
+        Make mask array for LAMOST spectra
+        """
+        bad_flux = ~np.isfinite(self.flux)
         bad_ivar = (~np.isfinite(self.ivar) | (self.ivar <= 0))
 
-        self.mask = bad_flux | bad_ivar
+        spread = 3 # due to redshift
+        skylines = np.array([4046, 4358, 5460, 5577, 6300, 6363, 6863])
+        bad_pix_skyline = np.zeros(self.wave.size, dtype=bool)
+        for skyline in skylines:
+            badmin = skyline-spread
+            badmax = skyline+spread
+            bad_pix_temp = np.logical_and(self.wave > badmin, self.wave < badmax)
+            bad_pix_skyline[bad_pix_temp] = True
+        # 34 pixels
+
+        self.mask = bad_flux | bad_ivar | bad_pix_skyline
